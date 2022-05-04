@@ -21,10 +21,12 @@
 // maximal length of user input
 #define MAX_COMMAND_LINE_LENGTH 1024
 
-void wait(int pid);
+void wait_proc(int pid);
 void info(int pid);
 void list();
-void execution(char** argv_intern, char* buffer);
+void job(char** argv_intern, char* buffer);
+void execution(char **argv_intern, char* buffer);
+void kill_proc(int pid);
 
 /* type definitions **************************************************************/
 
@@ -89,33 +91,31 @@ tsh_prompt_and_process()
   {
       if( strcmp( "quit", argv_intern[0] ) == 0 )
       {
-          // leave tsh
-          _exit( 0 );
+        _exit( 0 );
       }
       else if( strcmp( "info", argv_intern[0] ) == 0 )
       {
-          info((int)(*argv_intern[1]-'0'));
+        info((int)(*argv_intern[1]-'0'));
       }
       else if( strcmp( "list", argv_intern[0] ) == 0 )
       {
-          list();
+        list();
       }
       else if( strcmp( "wait", argv_intern[0] ) == 0 )
       {
-          wait((int)(*argv_intern[1]-'0'));
+        wait_proc(strtol(argv_intern[1], NULL, 10));
       }
       else if( strcmp( "kill", argv_intern[0] ) == 0 )
       {
-          // TODO: Here goes your code for the kill command
-          // (good idea: put it into an extra function)
+        kill_proc(strtol(argv_intern[1], NULL, 10));
       }
       else if( strcmp( "job", argv_intern[0] ) == 0 )
       {
-          //job(argv_intern, buffer);
+        job(argv_intern, buffer);
       }
       else
       {
-          execution(argv_intern, buffer);
+        execution(argv_intern, buffer);   
       }
   }
 
@@ -148,6 +148,35 @@ main( int argc, char **argv )
   _exit( 0 );
 }
 
+void job(char **argv_intern, char* buffer) {
+  pid_t cpid = fork();
+  if(cpid < 0) {
+    perror("fork");
+    _exit(EXIT_FAILURE);
+  } else if(cpid == 0) {
+    int status_code = execvp(argv_intern[1], &argv_intern[1]);
+    if(status_code == -1) {
+        printf("[command not found (or other general execution error)]\n");
+        printf("[status code = 255]\n");
+        return;
+    }
+  }
+  job_descr_t* job_descr = new job_descr_t;
+  job_descr->command=strdup(&buffer[3]);
+  job_descr->internal_id=job_list.size();
+  job_descr->pid=cpid;
+  int wait_pid = waitpid(cpid, &(job_descr->exit_status), WNOHANG);
+  job_descr->exit_status=WEXITSTATUS(job_descr->exit_status);
+  if(wait_pid) {
+    job_descr->job_status=JOB_FINISHED;  
+  } else if(wait_pid == 0) {
+    job_descr->job_status=JOB_RUNNING;
+  } else {
+    perror("waitpid");
+  }
+  job_list.push_back(job_descr);
+}
+
 
 void execution(char** argv_intern, char* buffer) {
   pid_t cpid=fork();
@@ -156,7 +185,9 @@ void execution(char** argv_intern, char* buffer) {
     if(status_code == -1) {
       printf("[command not found (or other general execution error)]\n");
       printf("[status code = 255]\n");
+      _exit(1);
     }
+
   } else {
     job_descr_t* job_descr = new job_descr_t;
     job_descr->command=strdup(buffer);
@@ -164,7 +195,7 @@ void execution(char** argv_intern, char* buffer) {
     job_descr->pid=cpid;
     job_descr->job_status=JOB_FINISHED;
     waitpid(cpid, &(job_descr->exit_status), 0);
-    //printf("%p\n", &job_descr);
+    job_descr->exit_status=WEXITSTATUS(job_descr->exit_status);
     job_list.push_back(job_descr);
   } 
 }
@@ -187,6 +218,8 @@ void info(int _pid) {
 void list() {
   for (size_t i=0; i < job_list.size(); i++) {
     job_descr_t job_descr = *job_list[i];
+    
+
     const char* status_string=NULL;
     if(job_descr.job_status == JOB_RUNNING) {
       status_string = "running status";
@@ -197,6 +230,27 @@ void list() {
   }
 }
 
-void wait(int pid) {
-  
+void kill_proc(int pid) {
+  printf("ID: %d\n", pid);
+  for(int i = 0; i < (int)job_list.size(); i++) {
+    printf("pid: %d\n", job_list[i]->pid);
+    if(job_list[i]->internal_id == pid) {
+      if(kill(job_list[i]->pid, SIGKILL) == -1) {
+        perror("kill");
+      } else {
+        waitpid(job_list[i]->pid, &(job_list[i]->exit_status), 0);
+        job_list[i]->job_status=JOB_FINISHED;
+      }
+    }
+  }
+}
+
+void wait_proc(int pid) {
+  for(int i = 0; i < (int)job_list.size(); i++) {
+    if(job_list[i]->internal_id == pid) {
+      waitpid(job_list[i]->pid, &(job_list[i])->exit_status, 0);
+      job_list[i]->exit_status=WEXITSTATUS(job_list[i]->exit_status);
+      job_list[i]->job_status=JOB_FINISHED;
+    }
+  }
 }
