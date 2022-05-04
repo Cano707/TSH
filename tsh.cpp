@@ -200,40 +200,44 @@ void execution(char** argv_intern, char* buffer) {
   } 
 }
 
-void info(int _pid) {
+void info(int pid) {
   for (size_t i=0; i < job_list.size(); i++) {
-    if((*job_list[i]).pid == _pid) {
-      job_descr_t job_descr = *job_list[i];
+    if((*job_list[i]).internal_id == pid) {
       const char* status_string=NULL;
-      if(job_descr.job_status == JOB_RUNNING) {
-        status_string = "running status";
-      } else { 
+      int status = waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
+      job_list[i]->exit_status = WEXITSTATUS(job_list[i]->exit_status);
+      if(status) {
+        job_list[i]->job_status=JOB_FINISHED;
         status_string = "finished_status";
+      } else if(status<0) {
+        perror("waitpid");
+      } else {
+        status_string = "running_status";
       }
-      printf("%d (pid %d{5} %s=%d{3}): %s\n", job_descr.internal_id, job_descr.pid, status_string, job_descr.exit_status, job_descr.command);
+      printf("%d (pid %d %s=%d): %s\n", job_list[i]->internal_id, job_list[i]->pid, status_string, job_list[i]->exit_status, job_list[i]->command);
     }
   }
 }
 
 void list() {
   for (size_t i=0; i < job_list.size(); i++) {
-    job_descr_t job_descr = *job_list[i];
-    
-
     const char* status_string=NULL;
-    if(job_descr.job_status == JOB_RUNNING) {
-      status_string = "running status";
-    } else { 
+    int status = waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
+    job_list[i]->exit_status = WEXITSTATUS(job_list[i]->exit_status);
+    if(status) {
+      job_list[i]->job_status=JOB_FINISHED;
       status_string = "finished_status";
+    } else if(status<0) {
+      perror("waitpid");
+    } else {
+      status_string = "running_status";
     }
-    printf("%d (pid %d %s=%d): %s\n", job_descr.internal_id, job_descr.pid, status_string, job_descr.exit_status, job_descr.command);
+    printf("%d (pid %d %s=%d): %s\n", job_list[i]->internal_id, job_list[i]->pid, status_string, job_list[i]->exit_status, job_list[i]->command);
   }
 }
 
 void kill_proc(int pid) {
-  printf("ID: %d\n", pid);
   for(int i = 0; i < (int)job_list.size(); i++) {
-    printf("pid: %d\n", job_list[i]->pid);
     if(job_list[i]->internal_id == pid) {
       if(kill(job_list[i]->pid, SIGKILL) == -1) {
         perror("kill");
