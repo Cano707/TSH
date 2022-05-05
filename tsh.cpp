@@ -7,6 +7,9 @@
  */
 
 
+// BUG: list replaces the exit status which has already been obtained
+
+
 #include "makeargv.h"
 
 #include <vector>
@@ -166,9 +169,9 @@ void job(char **argv_intern, char* buffer) {
   job_descr->internal_id=job_list.size();
   job_descr->pid=cpid;
   int wait_pid = waitpid(cpid, &(job_descr->exit_status), WNOHANG);
-  job_descr->exit_status=WEXITSTATUS(job_descr->exit_status);
   if(wait_pid) {
     job_descr->job_status=JOB_FINISHED;  
+    job_descr->exit_status=WEXITSTATUS(job_descr->exit_status);
   } else if(wait_pid == 0) {
     job_descr->job_status=JOB_RUNNING;
   } else {
@@ -203,17 +206,18 @@ void execution(char** argv_intern, char* buffer) {
 void info(int pid) {
   for (size_t i=0; i < job_list.size(); i++) {
     if((*job_list[i]).internal_id == pid) {
-      const char* status_string=NULL;
-      int status = waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
-      job_list[i]->exit_status = WEXITSTATUS(job_list[i]->exit_status);
-      if(status) {
-        job_list[i]->job_status=JOB_FINISHED;
-        status_string = "finished_status";
-      } else if(status<0) {
-        perror("waitpid");
-      } else {
-        status_string = "running_status";
-      }
+      const char* status_string="finished";
+      if(job_list[i]->job_status==JOB_RUNNING) {  
+        int waitpid_ret=waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
+        if(waitpid_ret) {
+          job_list[i]->exit_status=WEXITSTATUS(job_list[i]->exit_status);
+          job_list[i]->job_status=JOB_FINISHED;
+        } else if(waitpid_ret < 0) {
+          perror("waitpid");
+        } else {
+          status_string="running";
+        }
+      } 
       printf("%d (pid %d %s=%d): %s\n", job_list[i]->internal_id, job_list[i]->pid, status_string, job_list[i]->exit_status, job_list[i]->command);
     }
   }
@@ -221,17 +225,18 @@ void info(int pid) {
 
 void list() {
   for (size_t i=0; i < job_list.size(); i++) {
-    const char* status_string=NULL;
-    int status = waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
-    job_list[i]->exit_status = WEXITSTATUS(job_list[i]->exit_status);
-    if(status) {
-      job_list[i]->job_status=JOB_FINISHED;
-      status_string = "finished_status";
-    } else if(status<0) {
-      perror("waitpid");
-    } else {
-      status_string = "running_status";
-    }
+    const char* status_string="finished";
+    if(job_list[i]->job_status==JOB_RUNNING) {  
+      int waitpid_ret=waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
+      if(waitpid_ret) {
+        job_list[i]->exit_status=WEXITSTATUS(job_list[i]->exit_status);
+        job_list[i]->job_status=JOB_FINISHED;
+      } else if(waitpid_ret < 0) {
+        perror("waitpid");
+      } else {
+        status_string="running";
+      }
+    } 
     printf("%d (pid %d %s=%d): %s\n", job_list[i]->internal_id, job_list[i]->pid, status_string, job_list[i]->exit_status, job_list[i]->command);
   }
 }
