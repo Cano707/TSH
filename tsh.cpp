@@ -81,12 +81,6 @@ tsh_prompt_and_process()
   // BEGIN: HERE GOES YOUR CODE! 
   // ======================================================================
   
-  /*
-  // TODO: REMOVE THIS FOR LOOP AFTER YOUR SOLUTION IS FINISHED
-  for( int i=0; i < numtokens; i++ ) {
-    printf( "%s\n", argv_intern[i] );
-  }
-  */
 
   // check if at least one token was entered at the command line
   // (if not: do nothing)
@@ -98,7 +92,9 @@ tsh_prompt_and_process()
       }
       else if( strcmp( "info", argv_intern[0] ) == 0 )
       {
-        info((int)(*argv_intern[1]-'0'));
+        if (argv_intern[1] != NULL) {
+          info((int)(*argv_intern[1]-'0'));
+        }
       }
       else if( strcmp( "list", argv_intern[0] ) == 0 )
       {
@@ -106,15 +102,21 @@ tsh_prompt_and_process()
       }
       else if( strcmp( "wait", argv_intern[0] ) == 0 )
       {
-        wait_proc(strtol(argv_intern[1], NULL, 10));
+        if(argv_intern[1] != NULL) {
+          wait_proc(strtol(argv_intern[1], NULL, 10));
+        }
       }
       else if( strcmp( "kill", argv_intern[0] ) == 0 )
       {
-        kill_proc(strtol(argv_intern[1], NULL, 10));
+        if(argv_intern[1] != NULL) {
+          kill_proc(strtol(argv_intern[1], NULL, 10));
+        }
       }
       else if( strcmp( "job", argv_intern[0] ) == 0 )
       {
-        job(argv_intern, buffer);
+        if(buffer != NULL) {
+          job(argv_intern, buffer);
+        }
       }
       else
       {
@@ -183,7 +185,9 @@ void job(char **argv_intern, char* buffer) {
 
 void execution(char** argv_intern, char* buffer) {
   pid_t cpid=fork();
-  if(cpid==0) {
+  if(cpid < 0) {
+    perror("fork");
+  }else if(cpid==0) {
     int status_code = execvp(argv_intern[0], argv_intern);
     if(status_code == -1) {
       printf("[command not found (or other general execution error)]\n");
@@ -205,7 +209,7 @@ void execution(char** argv_intern, char* buffer) {
 
 void info(int pid) {
   for (size_t i=0; i < job_list.size(); i++) {
-    if((*job_list[i]).internal_id == pid) {
+    if(job_list[i]->internal_id == pid) {
       const char* status_string="finished";
       if(job_list[i]->job_status==JOB_RUNNING) {  
         int waitpid_ret=waitpid(job_list[i]->pid, &(job_list[i]->exit_status), WNOHANG);
@@ -248,6 +252,7 @@ void kill_proc(int pid) {
         perror("kill");
       } else {
         waitpid(job_list[i]->pid, &(job_list[i]->exit_status), 0);
+        job_list[i]->exit_status=-1;
         job_list[i]->job_status=JOB_FINISHED;
       }
     }
